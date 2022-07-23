@@ -8,6 +8,14 @@ type LoginForm = {
   password: string;
 };
 
+export async function register({ username, password }: LoginForm) {
+  const passwordHash = await bcrypt.hash(password, 10);
+  const user = await db.user.create({
+    data: { username, passwordHash },
+  });
+  return { id: user.id, username };
+}
+
 export async function login({ username, password }: LoginForm) {
   const user = await db.user.findUnique({
     where: { username },
@@ -81,11 +89,9 @@ export async function getUser(request: Request) {
 
 export async function logout(request: Request) {
   const session = await getUserSession(request);
-  const destroyed = await storage.destroySession(session);
-  console.log("destroyed", destroyed);
   return redirect("/login", {
     headers: {
-      "Set-Cookie": destroyed,
+      "Set-Cookie": await storage.destroySession(session),
     },
   });
 }
