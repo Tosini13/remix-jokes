@@ -1,13 +1,16 @@
+import type { ActionFunction, LoaderFunction } from "@remix-run/node";
+import { redirect, json } from "@remix-run/node";
 import {
-  type ActionFunction,
-  type LoaderFunction,
-  json,
-} from "@remix-run/node";
-import { redirect } from "@remix-run/node";
-import { Form, Link, useActionData, useCatch } from "@remix-run/react";
+  Form,
+  Link,
+  useActionData,
+  useCatch,
+  useTransition,
+} from "@remix-run/react";
 
+import { JokeDisplay } from "~/components/joke";
 import { db } from "~/utils/db.server";
-import { getUserId, requireUserId } from "~/utils/session.server";
+import { requireUserId, getUserId } from "~/utils/session.server";
 
 export const loader: LoaderFunction = async ({ request }) => {
   const userId = await getUserId(request);
@@ -48,8 +51,6 @@ export const action: ActionFunction = async ({ request }) => {
   const form = await request.formData();
   const name = form.get("name");
   const content = form.get("content");
-  // we do this type check to be extra sure and to make TypeScript happy
-  // we'll explore validation next!
   if (typeof name !== "string" || typeof content !== "string") {
     return badRequest({
       formError: `Form not submitted correctly.`,
@@ -60,9 +61,7 @@ export const action: ActionFunction = async ({ request }) => {
     name: validateJokeName(name),
     content: validateJokeContent(content),
   };
-
   const fields = { name, content };
-
   if (Object.values(fieldErrors).some(Boolean)) {
     return badRequest({ fieldErrors, fields });
   }
@@ -75,6 +74,26 @@ export const action: ActionFunction = async ({ request }) => {
 
 export default function NewJokeRoute() {
   const actionData = useActionData<ActionData>();
+  const transition = useTransition();
+
+  if (transition.submission) {
+    const name = transition.submission.formData.get("name");
+    const content = transition.submission.formData.get("content");
+    if (
+      typeof name === "string" &&
+      typeof content === "string" &&
+      !validateJokeContent(content) &&
+      !validateJokeName(name)
+    ) {
+      return (
+        <JokeDisplay
+          joke={{ name, content }}
+          isOwner={true}
+          canDelete={false}
+        />
+      );
+    }
+  }
 
   return (
     <div>
@@ -82,7 +101,7 @@ export default function NewJokeRoute() {
       <Form method="post">
         <div>
           <label>
-            Name:
+            Name:{" "}
             <input
               type="text"
               defaultValue={actionData?.fields?.name}
@@ -101,7 +120,7 @@ export default function NewJokeRoute() {
         </div>
         <div>
           <label>
-            Content:
+            Content:{" "}
             <textarea
               defaultValue={actionData?.fields?.content}
               name="content"
@@ -151,7 +170,9 @@ export function CatchBoundary() {
   }
 }
 
-export function ErrorBoundary() {
+export function ErrorBoundary({ error }: { error: Error }) {
+  console.error(error);
+
   return (
     <div className="error-container">
       Something unexpected went wrong. Sorry about that.
